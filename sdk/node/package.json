@@ -1,0 +1,33 @@
+{
+  "name": "@pith-hash/pith-text",
+  "version": "0.1.0",
+  "description": "Text fingerprints SDK: NFC canonicalisation, word 3-shingles and a 128-word MinHash signature via the pith-text Rust cdylib (koffi, prebuilt)",
+  "license": "MIT",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "prebuilds/",
+    "reference.json"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "koffi": "^2.12.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pith-hash/pith-text.git",
+    "directory": "sdk/node"
+  },
+  "keywords": [
+    "text",
+    "minhash",
+    "similarity",
+    "fingerprint",
+    "hashing"
+  ]
+}

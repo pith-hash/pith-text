@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pith-text"
+version = "0.1.0"
+description = "Text fingerprints SDK: NFC canonicalisation, word 3-shingles and a 128-word MinHash signature via the pith-text Rust cdylib (ctypes, zero-dep)"
+license = "MIT"
+requires-python = ">=3.9"
+keywords = ["text", "minhash", "similarity", "fingerprint", "hashing"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Rust",
+  "Topic :: Text Processing :: Linguistic",
+]
+
+[project.urls]
+Repository = "https://github.com/pith-hash/pith-text"
+Homepage = "https://github.com/pith-hash/pith-text"
+
+[tool.setuptools]
+packages = ["pith_text"]
+
+[tool.setuptools.package-data]
+pith_text = ["*.dll", "*.dylib", "*.so"]

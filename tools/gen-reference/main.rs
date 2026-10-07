@@ -25,7 +25,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use pith_digest::{fnv1a64, sha256};
-use pith_text::{canonicalize, jaccard_estimate, signature};
+use pith_text::reference::{Canonicalized, measure_signature, pipeline};
+use pith_text::{jaccard_estimate, signature};
 
 /// Where the committed copy lives, relative to the repository root.
 const REFERENCE_PATH: &str = "reference.json";
@@ -43,63 +44,14 @@ const FIXTURES: [&str; 8] = [
     "vi_nfd",
 ];
 
-/// Shingle width of the pipeline (spec §4: three consecutive words). The
-/// signature vectors pin it implicitly: a width change drifts them and
-/// `verify` fails loudly.
-const SHINGLE_WORDS: usize = 3;
+// Shingle width of the pipeline lives in `pith_text::reference`
+// (`SHINGLE_WORDS`), the single source of truth the FFI shares. The
+// canonicalisation measurement and the pipeline that produces it
+// (`Canonicalized`, `pipeline`, `SigFold`, `measure_signature`) moved
+// verbatim to `pith_text::reference` so the vectors and the SDKs
+// cannot drift; this binary imports them.
 
-/// One canonicalisation measurement: the canonical UTF-8 bytes plus the
-/// tokenization/shingling counts the pipeline derives from them.
-struct Canonicalized {
-    canonical: String,
-    word_count: usize,
-    shingle_count: usize,
-}
-
-/// Runs the documented pipeline stages over `input` and counts the
-/// tokens and `k`-word windows.
-fn pipeline(input: &str) -> Canonicalized {
-    let canonical = canonicalize(input);
-    let word_count = canonical.split_whitespace().count();
-    let shingle_count = if word_count == 0 {
-        0
-    } else {
-        word_count - word_count.min(SHINGLE_WORDS) + 1
-    };
-    Canonicalized {
-        canonical,
-        word_count,
-        shingle_count,
-    }
-}
-
-/// The 128-word MinHash signature folded for compact transport: first
-/// two words verbatim, then FNV-1a 64 and SHA-256 over all 128
-/// little-endian words.
-struct SigFold {
-    first: u64,
-    second: u64,
-    fnv1a64: u64,
-    sha256: String,
-    words: Vec<u64>,
-}
-
-fn measure_signature(input: &str) -> SigFold {
-    let words = signature(input);
-    assert_eq!(words.len(), 128, "signature length is part of the contract");
-    let mut le = Vec::with_capacity(words.len() * 8);
-    for w in &words {
-        le.extend_from_slice(&w.to_le_bytes());
-    }
-    SigFold {
-        first: words[0],
-        second: words[1],
-        fnv1a64: fnv1a64(&le),
-        sha256: hex(sha256(&le).expect("sha256 of signature words").as_bytes()),
-        words,
-    }
-}
-
+/// Lowercase hex of `bytes`.
 fn hex(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for b in bytes {

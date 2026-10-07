@@ -21,10 +21,15 @@
 //!    pure finalizer (spec §4: `splitmix64(FNV1a64(w) ^ seed_i)`).
 //!
 //! The crate is `no_std`: only `alloc` containers and `core` string
-//! operations are used, so the same code runs on embedded targets.
+//! operations are used, so the same code runs on embedded targets. The
+//! `std` feature (on by default) links `std` so the `cdylib` the
+//! language SDKs bind through carries a panic handler.
 
-#![no_std]
-#![forbid(unsafe_code)]
+#![cfg_attr(not(feature = "std"), no_std)]
+// `unsafe` is denied everywhere except `ffi`, the C ABI surface the
+// language SDKs bind through: raw pointers exist only at that boundary,
+// and every exported function is a documented `unsafe extern "C"` fn.
+#![deny(unsafe_code)]
 #![deny(missing_docs)]
 
 extern crate alloc;
@@ -33,6 +38,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use pith_digest::{SplitMix64, fnv1a64};
+
+pub mod ffi;
+pub mod reference;
 
 /// Number of words per shingle (spec §4: "3 từ liên tiếp").
 const SHINGLE_WORDS: usize = 3;
