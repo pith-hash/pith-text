@@ -4,7 +4,7 @@
 
 - Repo: `pith-hash/pith-text`
 - Description: Text fingerprints: NFC canonicalisation, word 3-shingles and a 128-word MinHash signature
-- License: Apache-2.0
+- License: MIT
 
 ## Build & Test
 
