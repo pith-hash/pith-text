@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "tier": 1,
+  "description": "Text fingerprints: NFC canonicalisation, word 3-shingles and a 128-word MinHash signature",
+  "homepage": "https://github.com/pith-hash/pith-text",
+  "topics": [
+    "rust",
+    "hashing",
+    "algorithms"
+  ]
+}

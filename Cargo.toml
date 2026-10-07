@@ -1,0 +1,26 @@
+[package]
+name = "pith-text"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+repository = "https://github.com/pith-hash/pith-text"
+homepage = "https://github.com/pith-hash/pith-text"
+description = "Text fingerprints: NFC canonicalisation, word 3-shingles and a 128-word MinHash signature"
+readme = "README.md"
+categories = ["algorithms", "cryptography"]
+keywords = ["text", "minhash", "similarity", "fingerprint", "hashing"]
+
+[dependencies]
+pith-digest = { git = "https://github.com/pith-hash/pith-digest.git", branch = "main" }
+pith-unicode = { git = "https://github.com/pith-hash/pith-unicode.git", branch = "main" }
+
+# Vector generator: regenerates reference.json (CI verifies it is current,
+# CD ships it with the SDK artifacts).
+[[bin]]
+name = "gen-reference"
+path = "tools/gen-reference/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
