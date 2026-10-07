@@ -206,10 +206,25 @@ fn arbitrary_bytes_and_prefixes_never_panic() {
 // The shipped cdylib (the artifact the language SDKs bind through)
 // ------------------------------------------------------------------
 
-/// Locates the built cdylib across the layouts `cargo test` and
-/// `cargo llvm-cov` produce. Returns `None` outside a cdylib build.
+/// The exported function signatures, as every SDK binds them
+/// (`extern "system"` and `extern "C"` are the same call ABI on the
+/// targets the suite builds).
+type FingerprintFn = unsafe extern "C" fn(*const u8, usize, *mut *mut u8, *mut usize) -> i32;
+type JaccardFn = unsafe extern "C" fn(*const u64, usize, *const u64, usize, *mut u64) -> i32;
+type FreeFn = unsafe extern "C" fn(*mut u8, usize);
+
+/// The cdylib file name cargo drops into the build directory on this
+/// platform.
 #[cfg(windows)]
-fn find_built_cdylib() -> Option<std::path::PathBuf> {
+const CDYLIB_FILE: &str = "pith_text.dll";
+#[cfg(target_os = "macos")]
+const CDYLIB_FILE: &str = "libpith_text.dylib";
+#[cfg(all(unix, not(target_os = "macos")))]
+const CDYLIB_FILE: &str = "libpith_text.so";
+
+/// Locates the built cdylib across the layouts `cargo test` and
+/// `cargo llvm-cov` produce.
+fn find_built_cdylib() -> std::path::PathBuf {
     let mut candidates = Vec::new();
     let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     if let Ok(dir) = std::env::var("CARGO_TARGET_DIR") {
@@ -219,59 +234,22 @@ fn find_built_cdylib() -> Option<std::path::PathBuf> {
     candidates.push(manifest.join("target"));
     for base in candidates {
         for dir in [base.join("debug/deps"), base.join("debug")] {
-            let dll = dir.join("pith_text.dll");
-            if dll.is_file() {
-                return Some(dll);
+            let lib = dir.join(CDYLIB_FILE);
+            if lib.is_file() {
+                return lib;
             }
         }
     }
-    None
+    panic!("cdylib {CDYLIB_FILE} not built; run `cargo build` first");
 }
 
-/// Loads the cdylib the same way the language SDKs do and drives all
-/// three exports end-to-end through `LoadLibraryW`/`GetProcAddress`:
-/// the golden-pin fingerprint (status, header, byte length, `free`),
-/// the empty-slice jaccard sentinel, the non-UTF-8 refusal and the
-/// null-buffer free. The crate root's `#![deny(unsafe_code)]` does not
-/// extend into this integration-test crate; raw pointers are exactly
-/// what this test is about.
-#[cfg(windows)]
-#[test]
-fn cdylib_exports_work_through_loadlibrary() {
-    use std::os::windows::ffi::OsStrExt;
-
-    type FingerprintFn =
-        unsafe extern "system" fn(*const u8, usize, *mut *mut u8, *mut usize) -> i32;
-    type JaccardFn =
-        unsafe extern "system" fn(*const u64, usize, *const u64, usize, *mut u64) -> i32;
-    type FreeFn = unsafe extern "system" fn(*mut u8, usize);
-
-    #[link(name = "kernel32")]
-    unsafe extern "system" {
-        fn LoadLibraryW(name: *const u16) -> isize;
-        fn GetProcAddress(module: isize, name: *const u8) -> isize;
-    }
-
-    let Some(dll) = find_built_cdylib() else {
-        panic!("cdylib pith_text.dll not built; run `cargo build` first");
-    };
-    let wide: Vec<u16> = std::ffi::OsStr::new(&dll)
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-    let module = unsafe { LoadLibraryW(wide.as_ptr()) };
-    assert_ne!(module, 0, "LoadLibraryW({dll:?}) failed");
-
-    unsafe fn symbol<A>(module: isize, name: &[u8]) -> A {
-        let addr = unsafe { GetProcAddress(module, name.as_ptr()) };
-        assert_ne!(addr, 0, "GetProcAddress({name:?}) failed");
-        unsafe { std::mem::transmute_copy::<isize, A>(&addr) }
-    }
-
-    let fingerprint: FingerprintFn = unsafe { symbol(module, c"pith_text_fingerprint".to_bytes()) };
-    let jaccard: JaccardFn = unsafe { symbol(module, c"pith_text_jaccard".to_bytes()) };
-    let free: FreeFn = unsafe { symbol(module, c"pith_text_free".to_bytes()) };
-
+/// Drives all three exports end-to-end through resolved function
+/// pointers: the golden-pin fingerprint (status, header, byte length,
+/// `free`), the empty-slice jaccard sentinel, the non-UTF-8 refusal
+/// and the null-buffer free. Raw pointers are exactly what this test
+/// is about (the crate root's `#![deny(unsafe_code)]` does not extend
+/// into this integration-test crate).
+unsafe fn drive_exports(fingerprint: FingerprintFn, jaccard: JaccardFn, free: FreeFn) {
     // Fingerprint: the golden-pin input, byte-exact stream + free.
     let input = b"alpha beta gamma";
     let mut out: *mut u8 = std::ptr::null_mut();
@@ -296,11 +274,66 @@ fn cdylib_exports_work_through_loadlibrary() {
     unsafe { free(std::ptr::null_mut(), 0) };
 }
 
-/// Non-Windows: the cdylib smoke runs on the Windows gate; unix CI
-/// exercises the same exports through the SDK matrix.
-#[cfg(not(windows))]
+/// Windows leg: `LoadLibraryW`/`GetProcAddress`, the same loader the
+/// ctypes/koffi/syscall SDK bindings use.
+#[cfg(windows)]
 #[test]
 fn cdylib_exports_work_through_loadlibrary() {
-    // dlopen-based coverage of the shipped artifact is exercised by the
-    // SDK matrices; nothing to assert here.
+    use std::os::windows::ffi::OsStrExt;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn LoadLibraryW(name: *const u16) -> isize;
+        fn GetProcAddress(module: isize, name: *const u8) -> isize;
+    }
+
+    let lib = find_built_cdylib();
+    let wide: Vec<u16> = std::ffi::OsStr::new(&lib)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let module = unsafe { LoadLibraryW(wide.as_ptr()) };
+    assert_ne!(module, 0, "LoadLibraryW({lib:?}) failed");
+
+    unsafe fn symbol<A>(module: isize, name: &[u8]) -> A {
+        let addr = unsafe { GetProcAddress(module, name.as_ptr()) };
+        assert_ne!(addr, 0, "GetProcAddress({name:?}) failed");
+        unsafe { std::mem::transmute_copy::<isize, A>(&addr) }
+    }
+
+    let fingerprint: FingerprintFn = unsafe { symbol(module, c"pith_text_fingerprint".to_bytes()) };
+    let jaccard: JaccardFn = unsafe { symbol(module, c"pith_text_jaccard".to_bytes()) };
+    let free: FreeFn = unsafe { symbol(module, c"pith_text_free".to_bytes()) };
+    unsafe { drive_exports(fingerprint, jaccard, free) };
+}
+
+/// Unix leg (Linux and macOS): `dlopen`/`dlsym`, the same loader the
+/// cgo SDK binding uses (dlclose is deliberately skipped — the profile
+/// runtime and the loader's own refcount outlive the test).
+#[cfg(unix)]
+#[test]
+fn cdylib_exports_work_through_dlopen() {
+    use std::ffi::{c_char, c_int, c_void};
+
+    unsafe extern "C" {
+        fn dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+    }
+    const RTLD_NOW: c_int = 2;
+
+    let path = find_built_cdylib();
+    let cpath = std::ffi::CString::new(path.to_str().expect("utf-8 path")).expect("nul-free");
+    let handle = unsafe { dlopen(cpath.as_ptr(), RTLD_NOW) };
+    assert!(!handle.is_null(), "dlopen({path:?}) failed");
+
+    unsafe fn symbol<F>(handle: *mut c_void, name: &[u8]) -> F {
+        let addr = unsafe { dlsym(handle, name.as_ptr() as *const c_char) };
+        assert!(!addr.is_null(), "dlsym({name:?}) failed");
+        unsafe { std::mem::transmute_copy::<*mut c_void, F>(&addr) }
+    }
+
+    let fingerprint: FingerprintFn = unsafe { symbol(handle, c"pith_text_fingerprint".to_bytes()) };
+    let jaccard: JaccardFn = unsafe { symbol(handle, c"pith_text_jaccard".to_bytes()) };
+    let free: FreeFn = unsafe { symbol(handle, c"pith_text_free".to_bytes()) };
+    unsafe { drive_exports(fingerprint, jaccard, free) };
 }
