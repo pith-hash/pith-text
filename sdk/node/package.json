@@ -1,6 +1,6 @@
 {
   "name": "@pith-hash/pith-text",
-  "version": "0.1.1-beta.1",
+  "version": "0.1.1",
   "description": "Text fingerprints SDK: NFC canonicalisation, word 3-shingles and a 128-word MinHash signature via the pith-text Rust cdylib (koffi, prebuilt)",
   "license": "MIT",
   "main": "index.js",
