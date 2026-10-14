@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.pith-hash</groupId>
   <artifactId>pith-text</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1-beta.1</version>
   <packaging>jar</packaging>
   <name>pith-text</name>
   <description>Java JNI bindings for the pith-text cdylib: text fingerprinting (MinHash over canonicalised words) and Jaccard similarity (hex-exact vs reference.json)</description>
